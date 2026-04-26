@@ -13,6 +13,9 @@ from api.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Allowlist of metric field names accepted in Flux trend queries
+_VALID_TREND_METRICS = frozenset({"hr", "bp_sys", "bp_dia", "o2_sat", "temperature"})
+
 # PostgreSQL setup
 engine = create_engine(
     settings.DATABASE_URL,
@@ -277,6 +280,10 @@ def _write_prediction_influx_sync(data: dict) -> bool:
 
 
 def _query_vitals_trends_sync(metric: str, hours: int) -> List[dict]:
+    if metric not in _VALID_TREND_METRICS:
+        raise ValueError(
+            f"Invalid metric '{metric}'. Must be one of {sorted(_VALID_TREND_METRICS)}"
+        )
     try:
         client = get_influx_client()
         query_api = client.query_api()

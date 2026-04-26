@@ -150,3 +150,23 @@ class TestAcknowledgeAlertSync:
         mock_session.execute.return_value = mock_result
 
         assert _acknowledge_alert_sync(999) is False
+
+
+class TestQueryVitalsTrends:
+    def test_invalid_metric_raises_value_error(self):
+        from api.services.database import _query_vitals_trends_sync
+
+        with pytest.raises(ValueError, match="Invalid metric"):
+            _query_vitals_trends_sync("'; DROP TABLE vitals; --", 24)
+
+    def test_valid_metrics_pass_allowlist(self):
+        """Valid metric names must not raise ValueError (DB call will fail, but not due to allowlist)."""
+        from api.services.database import _query_vitals_trends_sync
+
+        for metric in ("hr", "bp_sys", "bp_dia", "o2_sat", "temperature"):
+            try:
+                _query_vitals_trends_sync(metric, 1)
+            except ValueError:
+                pytest.fail(f"Valid metric '{metric}' raised ValueError")
+            except Exception:
+                pass  # DB connection error expected in unit test context

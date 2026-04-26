@@ -81,6 +81,30 @@ class TestVitalsEndpoints:
         response = client.get("/api/v1/vitals/999")
         assert response.status_code == 404
 
+    @patch("api.routes.vitals.database.write_vital_to_influx", new_callable=AsyncMock)
+    @patch("api.routes.vitals.database.insert_vital", new_callable=AsyncMock)
+    def test_post_vital_valid_body_returns_created(self, mock_insert, mock_influx, client):
+        mock_insert.return_value = 10
+        mock_influx.return_value = True
+        body = {
+            "timestamp": 1_000_000, "hr": 75.0, "bp_sys": 120.0, "bp_dia": 80.0,
+            "o2_sat": 98.0, "temperature": 37.0, "quality": 95, "source": "test",
+        }
+        response = client.post("/api/v1/vitals", json=body)
+        assert response.status_code == 200
+        assert response.json()["status"] == "created"
+        assert response.json()["id"] == 10
+
+    def test_post_vital_invalid_hr_returns_422(self, client):
+        body = {"timestamp": 1_000_000, "hr": 999.0}  # hr > 300 is invalid
+        response = client.post("/api/v1/vitals", json=body)
+        assert response.status_code == 422
+
+    def test_post_vital_missing_timestamp_returns_422(self, client):
+        body = {"hr": 75.0}
+        response = client.post("/api/v1/vitals", json=body)
+        assert response.status_code == 422
+
 
 class TestPredictionsEndpoints:
     @patch("api.routes.predictions.database.get_predictions", new_callable=AsyncMock)
@@ -109,6 +133,32 @@ class TestPredictionsEndpoints:
         mock_db.return_value = None
         response = client.get("/api/v1/predictions/latest")
         assert response.status_code == 404
+
+    @patch("api.routes.predictions.database.write_prediction_to_influx", new_callable=AsyncMock)
+    @patch("api.routes.predictions.database.insert_prediction", new_callable=AsyncMock)
+    def test_post_prediction_valid_body_returns_created(self, mock_insert, mock_influx, client):
+        mock_insert.return_value = 5
+        mock_influx.return_value = True
+        body = {
+            "timestamp": 1_000_000, "risk_score": 30.0, "risk_level": "LOW", "confidence": 0.8,
+        }
+        response = client.post("/api/v1/predictions", json=body)
+        assert response.status_code == 200
+        assert response.json()["status"] == "created"
+        assert response.json()["id"] == 5
+
+    def test_post_prediction_invalid_risk_level_returns_422(self, client):
+        body = {
+            "timestamp": 1_000_000, "risk_score": 30.0,
+            "risk_level": "INVALID", "confidence": 0.8,
+        }
+        response = client.post("/api/v1/predictions", json=body)
+        assert response.status_code == 422
+
+    def test_post_prediction_missing_required_fields_returns_422(self, client):
+        body = {"timestamp": 1_000_000}  # missing risk_score, risk_level, confidence
+        response = client.post("/api/v1/predictions", json=body)
+        assert response.status_code == 422
 
 
 class TestAnalyticsEndpoints:

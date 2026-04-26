@@ -76,7 +76,7 @@ function displayVital(vital) {
         document.getElementById('o2Value').textContent = vital.o2_sat.toFixed(1);
     if (vital.temperature != null)
         document.getElementById('tempValue').textContent = vital.temperature.toFixed(1);
-    if (vital.timestamp) {
+    if (vital.timestamp != null) {
         pushToChart(hrChart, vital.timestamp, vital.hr);
         pushToChart(o2Chart, vital.timestamp, vital.o2_sat);
     }
@@ -185,7 +185,7 @@ async function acknowledgeAlert(id) {
 
 async function loadSystemStatus() {
     try {
-        const res = await fetch(`${API_BASE}/health`);
+        const res = await fetch('/health');
         const ok = res.ok;
         document.getElementById('apiStatus').textContent = ok ? '✓ Running' : '✗ Error';
         document.getElementById('apiStatus').style.color = ok ? '#4ade80' : '#f87171';
@@ -219,6 +219,8 @@ async function refreshCharts() {
 }
 
 // ── Bootstrap ─────────────────────────────────────────────────────
+const _intervals = [];
+
 window.addEventListener('load', () => {
     initCharts();
     connectWebSocket();
@@ -228,8 +230,13 @@ window.addEventListener('load', () => {
     refreshCharts();
 
     // Periodic REST fallback & alert polling
-    setInterval(loadLatestData, 30_000);
-    setInterval(loadAlerts, 15_000);
-    setInterval(loadSystemStatus, 30_000);
-    setInterval(refreshCharts, 300_000);  // Every 5 min
+    _intervals.push(setInterval(loadLatestData, 30_000));
+    _intervals.push(setInterval(loadAlerts, 15_000));
+    _intervals.push(setInterval(loadSystemStatus, 30_000));
+    _intervals.push(setInterval(refreshCharts, 300_000));  // Every 5 min
+});
+
+window.addEventListener('unload', () => {
+    _intervals.forEach(clearInterval);
+    if (wsConnection) wsConnection.close();
 });

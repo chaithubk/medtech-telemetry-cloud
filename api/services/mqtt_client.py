@@ -69,6 +69,12 @@ class MQTTClient:
         if rc != 0:
             logger.warning(f"MQTT unexpected disconnect (rc={rc}), will reconnect...")
 
+    def _log_future_exception(self, future: "asyncio.Future") -> None:
+        """Log any exception raised by a coroutine dispatched from the MQTT thread."""
+        exc = future.exception()
+        if exc is not None:
+            logger.error("MQTT handler raised exception: %s", exc, exc_info=exc)
+
     def _on_message(self, client, userdata, msg):
         """Decode and dispatch incoming MQTT message to async handlers."""
         try:
@@ -77,13 +83,15 @@ class MQTTClient:
             topic = msg.topic
 
             if topic == settings.MQTT_TOPIC_VITALS:
-                asyncio.run_coroutine_threadsafe(
+                future = asyncio.run_coroutine_threadsafe(
                     self._handle_vital(payload), self._loop
                 )
+                future.add_done_callback(self._log_future_exception)
             elif topic == settings.MQTT_TOPIC_PREDICTIONS:
-                asyncio.run_coroutine_threadsafe(
+                future = asyncio.run_coroutine_threadsafe(
                     self._handle_prediction(payload), self._loop
                 )
+                future.add_done_callback(self._log_future_exception)
         except json.JSONDecodeError as e:
             logger.error(f"MQTT message JSON decode error: {e}")
         except Exception as e:
@@ -103,11 +111,15 @@ class MQTTClient:
 
         vital_dict = vital.model_dump()
         vital_id = await database.insert_vital(vital_dict)
-        await database.write_vital_to_influx(vital_dict)
-
-        alerts = check_vital_alerts(vital_dict, vital_id)
-        for alert in alerts:
-            await database.insert_alert(alert)
+        if vital_id is None:
+            # Duplicate timestamp or DB error – skip InfluxDB write and alert
+            # creation to avoid time-series duplicates and orphaned alerts.
+            logger.debug("Vital insert returned None (duplicate or error); skipping InfluxDB/alerts")
+        else:
+            await database.write_vital_to_influx(vital_dict)
+            alerts = check_vital_alerts(vital_dict, vital_id)
+            for alert in alerts:
+                await database.insert_alert(alert)
 
         if _ws_broadcaster:
             await _ws_broadcaster({"type": "vital", "data": vital_dict})
@@ -126,11 +138,15 @@ class MQTTClient:
 
         pred_dict = pred.model_dump()
         pred_id = await database.insert_prediction(pred_dict)
-        await database.write_prediction_to_influx(pred_dict)
-
-        alerts = check_prediction_alerts(pred_dict, pred_id)
-        for alert in alerts:
-            await database.insert_alert(alert)
+        if pred_id is None:
+            # Duplicate timestamp or DB error – skip InfluxDB write and alert
+            # creation to avoid time-series duplicates and orphaned alerts.
+            logger.debug("Prediction insert returned None (duplicate or error); skipping InfluxDB/alerts")
+        else:
+            await database.write_prediction_to_influx(pred_dict)
+            alerts = check_prediction_alerts(pred_dict, pred_id)
+            for alert in alerts:
+                await database.insert_alert(alert)
 
         if _ws_broadcaster:
             await _ws_broadcaster({"type": "prediction", "data": pred_dict})

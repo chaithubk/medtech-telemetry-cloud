@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
+from api.models.mqtt_payload import PredictionPayload
 from api.services import database
 
 router = APIRouter()
@@ -26,10 +27,11 @@ async def get_latest_prediction():
 
 
 @router.post("/predictions", tags=["predictions"])
-async def create_prediction(prediction: dict):
+async def create_prediction(prediction: PredictionPayload):
     """Ingest prediction directly (non-MQTT path)."""
-    pred_id = await database.insert_prediction(prediction)
+    pred_dict = prediction.model_dump()
+    pred_id = await database.insert_prediction(pred_dict)
     if pred_id:
-        await database.write_prediction_to_influx(prediction)
+        await database.write_prediction_to_influx(pred_dict)
         return {"status": "created", "id": pred_id}
     return {"status": "duplicate", "message": "Prediction with this timestamp already exists"}

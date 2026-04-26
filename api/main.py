@@ -47,7 +47,7 @@ async def startup():
     # Register WebSocket broadcaster with MQTT client
     stream.setup_broadcaster()
     # Start MQTT client in a background thread bound to the running event loop
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     mqtt_client.start(loop)
 
 

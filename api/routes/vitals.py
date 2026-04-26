@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Query, HTTPException
 from typing import Optional
+from api.models.mqtt_payload import VitalPayload
 from api.services import database
 
 router = APIRouter()
@@ -35,10 +36,11 @@ async def get_vital(vital_id: int):
 
 
 @router.post("/vitals", tags=["vitals"])
-async def create_vital(vital: dict):
+async def create_vital(vital: VitalPayload):
     """Ingest vital reading directly (non-MQTT path)."""
-    vital_id = await database.insert_vital(vital)
+    vital_dict = vital.model_dump()
+    vital_id = await database.insert_vital(vital_dict)
     if vital_id:
-        await database.write_vital_to_influx(vital)
+        await database.write_vital_to_influx(vital_dict)
         return {"status": "created", "id": vital_id}
     return {"status": "duplicate", "message": "Vital with this timestamp already exists"}
