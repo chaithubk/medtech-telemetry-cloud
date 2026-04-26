@@ -291,3 +291,87 @@ curl http://localhost:3000
 # 9. Stop services
 docker compose down
 ```
+
+## Troubleshooting
+
+### Dashboard shows static / no live updates
+
+The WebSocket pipeline (MQTT → API → WebSocket → browser) is healthy but the broker must receive messages.
+
+1. Confirm the stack is up: `docker compose ps` — all containers should be `healthy`.
+2. Verify the API is subscribing: `docker compose logs api | grep "MQTT.*subscrib"`.
+3. Send a test message via the simulator and watch API logs:
+   ```bash
+   COUNT=3 INTERVAL=1 bash scripts/publish_live_vitals.sh
+   docker compose logs api --since=10s | grep "MQTT message received"
+   ```
+4. If API logs show no messages, check which process owns port 1883 (see WSL section below).
+
+---
+
+### WSL: host `mosquitto` conflicts with Docker broker on port 1883
+
+**Root cause.** When a `mosquitto` service is running on the WSL host it binds `127.0.0.1:1883`. Any `mosquitto_pub` call to `localhost:1883` then hits the *host* broker, not the containerised one. Messages land on the wrong broker and the API subscriber never fires — the dashboard appears frozen.
+
+**Diagnosis:**
+
+```bash
+# Does a host mosquitto own 1883?
+netstat -tlnp | grep 1883
+# "127.0.0.1:1883 LISTEN" with a non-Docker PID confirms the conflict.
+
+# What port is Docker actually exposing?
+docker compose port mqtt 1883
+# If this shows 0.0.0.0:1883 but the host also owns 1883, Docker's NAT
+# rule still maps 127.0.0.1:1883 to the host service first.
+```
+
+**Fix — stop the host service (recommended for development):**
+
+```bash
+sudo systemctl stop mosquitto
+sudo systemctl disable mosquitto   # prevent restart on next WSL boot
+```
+
+**Alternative fix — remap the Docker host port so there is no clash:**
+
+In `docker-compose.yml`, change the mqtt port mapping:
+```yaml
+ports:
+  - "1884:1883"   # host 1884 → container 1883
+  - "9001:9001"
+```
+Then publish to port 1884 from the WSL host:
+```bash
+PORT=1884 bash scripts/publish_live_vitals.sh
+```
+
+**Verify the fix (whichever approach you chose):**
+
+```bash
+mosquitto_pub -h localhost -p 1883 -t medtech/vitals/latest \
+  -m '{"hr":80,"source":"fix-check"}' && sleep 2 && \
+docker compose logs api --since=5s | grep "MQTT message received"
+```
+If the API log line appears, the conflict is resolved.
+
+---
+
+### MQTT messages connect to broker but API logs nothing
+
+This means the message reached the Mosquitto container but the API client did not receive it. Possible causes:
+
+- Topic mismatch — check the subscriber topic: `docker compose logs api | grep "subscrib"`. Default is `medtech/vitals/latest` and `medtech/predictions/sepsis`.
+- API container restarted after the MQTT client connected — `docker compose restart api` and retry.
+- ACL rules blocking the topic — review `config/mosquitto-medtech.conf`.
+
+---
+
+### 403 on dashboard (`http://localhost:3000`)
+
+Nginx is serving from the wrong path or the container is not running.
+
+```bash
+docker compose logs dashboard
+# Look for "403 Forbidden" source path, then fix nginx.conf static root.
+```
