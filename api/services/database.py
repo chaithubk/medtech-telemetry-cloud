@@ -234,19 +234,21 @@ def _write_vital_influx_sync(data: dict) -> bool:
     try:
         client = get_influx_client()
         write_api = client.write_api(write_options=SYNCHRONOUS)
-        point = (
-            Point("vitals")
-            .tag("source", data.get("source", "device"))
-            .field("hr", float(data["hr"]) if data.get("hr") is not None else None)
-            .field("bp_sys", float(data["bp_sys"]) if data.get("bp_sys") is not None else None)
-            .field("bp_dia", float(data["bp_dia"]) if data.get("bp_dia") is not None else None)
-            .field("o2_sat", float(data["o2_sat"]) if data.get("o2_sat") is not None else None)
-            .field("temperature", float(data["temperature"]) if data.get("temperature") is not None else None)
-            .field("quality", int(data["quality"]) if data.get("quality") is not None else None)
-            .time(data["timestamp"] * 1_000_000)  # ms to ns
-        )
-        # Remove None fields
-        point._fields = {k: v for k, v in point._fields.items() if v is not None}
+        # Build point conditionally to avoid None fields
+        point = Point("vitals").tag("source", data.get("source", "device"))
+        point = point.time(data["timestamp"] * 1_000_000)  # ms → ns
+        if data.get("hr") is not None:
+            point = point.field("hr", float(data["hr"]))
+        if data.get("bp_sys") is not None:
+            point = point.field("bp_sys", float(data["bp_sys"]))
+        if data.get("bp_dia") is not None:
+            point = point.field("bp_dia", float(data["bp_dia"]))
+        if data.get("o2_sat") is not None:
+            point = point.field("o2_sat", float(data["o2_sat"]))
+        if data.get("temperature") is not None:
+            point = point.field("temperature", float(data["temperature"]))
+        if data.get("quality") is not None:
+            point = point.field("quality", int(data["quality"]))
         write_api.write(bucket=settings.INFLUXDB_BUCKET, org=settings.INFLUXDB_ORG, record=point)
         return True
     except Exception as e:
@@ -263,10 +265,10 @@ def _write_prediction_influx_sync(data: dict) -> bool:
             .tag("risk_level", data.get("risk_level", "UNKNOWN"))
             .field("risk_score", float(data["risk_score"]))
             .field("confidence", float(data["confidence"]))
-            .field("model_latency_ms", float(data["model_latency_ms"]) if data.get("model_latency_ms") is not None else None)
-            .time(data["timestamp"] * 1_000_000)
+            .time(data["timestamp"] * 1_000_000)  # ms → ns
         )
-        point._fields = {k: v for k, v in point._fields.items() if v is not None}
+        if data.get("model_latency_ms") is not None:
+            point = point.field("model_latency_ms", float(data["model_latency_ms"]))
         write_api.write(bucket=settings.INFLUXDB_BUCKET, org=settings.INFLUXDB_ORG, record=point)
         return True
     except Exception as e:

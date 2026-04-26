@@ -157,13 +157,24 @@ async function loadAlerts() {
         const alerts = await res.json();
         document.getElementById('alertCount').textContent = alerts.length;
         const container = document.getElementById('alertsList');
-        if (alerts.length === 0) { container.innerHTML = 'No active alerts'; return; }
-        container.innerHTML = alerts.map(a => `
-            <div class="alert-item severity-${a.severity}">
-                <span>${a.message}</span>
-                <button class="btn-ack" onclick="acknowledgeAlert(${a.id})">Ack</button>
-            </div>
-        `).join('');
+        if (alerts.length === 0) { container.textContent = 'No active alerts'; return; }
+        container.innerHTML = '';
+        alerts.forEach(a => {
+            const div = document.createElement('div');
+            div.className = `alert-item severity-${a.severity}`;
+
+            const span = document.createElement('span');
+            span.textContent = a.message;  // textContent prevents XSS
+
+            const btn = document.createElement('button');
+            btn.className = 'btn-ack';
+            btn.textContent = 'Ack';
+            btn.addEventListener('click', () => acknowledgeAlert(a.id));
+
+            div.appendChild(span);
+            div.appendChild(btn);
+            container.appendChild(div);
+        });
     } catch (e) { /* ignore */ }
 }
 

@@ -7,11 +7,16 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   # ── 1. Code Quality ────────────────────────────────────────────────
   code-quality:
     name: Code Quality
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -24,15 +29,19 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Check formatting (black)
-        run: black --check api/ tests/ --line-length 100 || true
+        run: black --check api/ tests/ --line-length 100
+        continue-on-error: true
 
       - name: Lint (flake8)
-        run: flake8 api/ tests/ --max-line-length=120 --ignore=E501,W503 || true
+        run: flake8 api/ tests/ --max-line-length=120 --ignore=E501,W503
+        continue-on-error: true
 
   # ── 2. Unit Tests ──────────────────────────────────────────────────
   unit-tests:
     name: Unit Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -68,6 +77,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     services:
       postgres:
         image: postgres:15-alpine
@@ -114,8 +125,9 @@ jobs:
           MQTT_CID=$(docker ps -q --filter "expose=1883")
           if [ -n "$MQTT_CID" ]; then
             docker exec "$MQTT_CID" sh -c \
-              'printf "listener 1883\nallow_anonymous true\n" > /mosquitto/config/mosquitto.conf && kill -HUP 1' || true
+              'printf "listener 1883\nallow_anonymous true\n" > /mosquitto/config/mosquitto.conf && kill -HUP 1'
           fi
+        continue-on-error: true
 
       - name: Run integration tests
         run: |
@@ -133,6 +145,8 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
 
@@ -149,22 +163,24 @@ jobs:
       - name: Check required files
         run: |
           echo "Checking required files..."
-          test -f requirements.txt        && echo "  ✅ requirements.txt"
-          test -f Dockerfile.api          && echo "  ✅ Dockerfile.api"
-          test -f config/init.sql         && echo "  ✅ config/init.sql"
+          test -f requirements.txt         && echo "  ✅ requirements.txt"
+          test -f Dockerfile.api           && echo "  ✅ Dockerfile.api"
+          test -f config/init.sql          && echo "  ✅ config/init.sql"
           test -f frontend/html/index.html && echo "  ✅ dashboard HTML"
-          test -f api/services/mqtt_client.py && echo "  ✅ mqtt_client.py"
-          test -f api/services/database.py    && echo "  ✅ database.py"
+          test -f api/services/mqtt_client.py  && echo "  ✅ mqtt_client.py"
+          test -f api/services/database.py     && echo "  ✅ database.py"
           test -f api/services/alert_engine.py && echo "  ✅ alert_engine.py"
-          test -f api/models/mqtt_payload.py  && echo "  ✅ mqtt_payload.py"
+          test -f api/models/mqtt_payload.py   && echo "  ✅ mqtt_payload.py"
           test -f tests/fixtures/mqtt_simulator.py && echo "  ✅ mqtt_simulator.py"
-          test -f tests/unit/test_mqtt_payloads.py && echo "  ✅ unit tests"
+          test -f tests/unit/test_mqtt_payloads.py  && echo "  ✅ unit tests"
           echo "✅ All required files present"
 
   # ── 5. Status Report ───────────────────────────────────────────────
   status:
     name: CI Status
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     needs: [code-quality, unit-tests, integration-tests, docker-build]
     if: always()
     steps:
