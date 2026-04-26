@@ -4,38 +4,81 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MedTech Telemetry Dashboard</title>
-    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="header">
         <h1>🏥 MedTech Telemetry Dashboard</h1>
-        <p>Real-time Medical IoT Data</p>
+        <div class="header-status">
+            <span id="wsStatus" class="status-indicator status-disconnected">⚪ WebSocket: Disconnected</span>
+            <span id="lastUpdate" class="last-update">Never updated</span>
+        </div>
     </div>
-    
+
     <div class="container">
+        <!-- Vitals Grid -->
         <div class="status-grid">
             <div class="card">
-                <h3>Latest Vital</h3>
-                <div id="latestVital" class="placeholder">Loading...</div>
+                <h3>❤️ Heart Rate</h3>
+                <div id="hrValue" class="metric">---</div>
+                <div class="metric-label">BPM</div>
             </div>
-            
             <div class="card">
-                <h3>Latest Prediction</h3>
-                <div id="latestPrediction" class="placeholder">Loading...</div>
+                <h3>🩺 Blood Pressure</h3>
+                <div id="bpValue" class="metric">---/---</div>
+                <div class="metric-label">mmHg</div>
             </div>
-            
             <div class="card">
-                <h3>System Status</h3>
-                <div id="systemStatus" class="placeholder">Loading...</div>
+                <h3>💨 SpO₂</h3>
+                <div id="o2Value" class="metric">---</div>
+                <div class="metric-label">%</div>
+            </div>
+            <div class="card">
+                <h3>🌡️ Temperature</h3>
+                <div id="tempValue" class="metric">---</div>
+                <div class="metric-label">°C</div>
             </div>
         </div>
-        
+
+        <!-- Risk + Status + Alerts -->
+        <div class="status-grid">
+            <div class="card risk-card" id="riskCard">
+                <h3>🧬 Sepsis Risk</h3>
+                <div id="riskLevel" class="metric">---</div>
+                <div id="riskScore" class="metric-label">Score: ---</div>
+                <div id="riskConfidence" style="font-size:12px;margin-top:5px;">Confidence: ---</div>
+            </div>
+            <div class="card">
+                <h3>📡 System Status</h3>
+                <div id="systemStatus">
+                    <div>API: <span id="apiStatus" style="color:gray;">Checking...</span></div>
+                    <div>MQTT: <span id="mqttStatus" style="color:gray;">Unknown</span></div>
+                    <div>WebSocket: <span id="wsStatusText" style="color:gray;">Disconnected</span></div>
+                </div>
+            </div>
+            <div class="card alerts-card">
+                <h3>🚨 Active Alerts <span id="alertCount" class="badge">0</span></h3>
+                <div id="alertsList" class="alerts-list">No active alerts</div>
+            </div>
+        </div>
+
+        <!-- HR Chart -->
         <div class="chart-container">
-            <h3>Vital Trends (Last 24 Hours)</h3>
-            <div id="chart" class="placeholder">Chart implementation pending</div>
+            <div class="chart-header">
+                <h3>📈 Heart Rate Trend (Last 24 Hours)</h3>
+                <button onclick="refreshCharts()" class="btn-refresh">↻ Refresh</button>
+            </div>
+            <canvas id="hrChart" height="80"></canvas>
+        </div>
+
+        <!-- SpO2 Chart -->
+        <div class="chart-container">
+            <h3>🫁 SpO₂ Trend (Last 24 Hours)</h3>
+            <canvas id="o2Chart" height="80"></canvas>
         </div>
     </div>
-    
-    <script src="/js/dashboard.js"></script>
+
+    <script src="/static/dashboard.js"></script>
 </body>
 </html>

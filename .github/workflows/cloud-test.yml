@@ -5,49 +5,250 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  validate:
-    name: Validate Configuration
+  # ── 1. Code Quality ────────────────────────────────────────────────
+  code-quality:
+    name: Code Quality
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Validate docker-compose
-        run: |
-          docker compose config > /dev/null
-          echo "✅ docker-compose.yml is valid"
-      
-      - name: Check files
-        run: |
-          echo "✅ Checking required files..."
-          [ -f "requirements.txt" ] && echo "  ✅ requirements.txt"
-          [ -f "Dockerfile.api" ] && echo "  ✅ Dockerfile.api"
-          [ -f "config/init.sql" ] && echo "  ✅ config/init.sql"
-          [ -f "frontend/html/index.html" ] && echo "  ✅ frontend/html/index.html"
-          echo "✅ All files present"
 
-  docker:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Check formatting (black)
+        run: black --check api/ tests/ --line-length 100
+        continue-on-error: true
+
+      - name: Lint (flake8)
+        run: flake8 api/ tests/ --max-line-length=120 --ignore=E501,W503
+        continue-on-error: true
+
+  # ── 2. Unit Tests ──────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: |
+          pytest tests/unit/ tests/acceptance/ -v --tb=short \
+            --cov=api --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            -p no:warnings
+        env:
+          MQTT_BROKER: localhost
+          POSTGRES_HOST: localhost
+          INFLUXDB_URL: http://localhost:8086
+          INFLUXDB_TOKEN: ""
+          LOGLEVEL: WARNING
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+
+  # ── 3. Integration Tests ───────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: medtech
+          POSTGRES_PASSWORD: medtech123
+          POSTGRES_DB: telemetry
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medtech -d telemetry"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mqtt:
+        image: eclipse-mosquitto:latest
+        ports:
+          - 1883:1883
+        volumes: []
+        options: >-
+          --health-cmd "mosquitto_sub -h localhost -t test -C 1 -W 3 || true"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 3
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Apply database schema
+        run: |
+          PGPASSWORD=medtech123 psql -h localhost -U medtech -d telemetry -f config/init.sql
+
+      - name: Configure Mosquitto (allow anonymous)
+        run: |
+          MQTT_CID=$(docker ps -q --filter "expose=1883")
+          if [ -n "$MQTT_CID" ]; then
+            docker exec "$MQTT_CID" sh -c \
+              'printf "listener 1883\nallow_anonymous true\n" > /mosquitto/config/mosquitto.conf && kill -HUP 1'
+          fi
+        continue-on-error: true
+
+      - name: Run integration tests
+        run: |
+          pytest tests/integration/ -v --tb=short -m integration -p no:warnings
+        env:
+          MQTT_BROKER: localhost
+          TEST_MQTT_BROKER: localhost
+          POSTGRES_HOST: localhost
+          TEST_POSTGRES_HOST: localhost
+          INFLUXDB_URL: http://localhost:8086
+          INFLUXDB_TOKEN: ""
+          LOGLEVEL: WARNING
+
+  # ── 4. Docker Build ────────────────────────────────────────────────
+  docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Build API image
         run: |
           docker build -t medtech-cloud-api:latest -f Dockerfile.api .
           echo "✅ API Docker image built"
 
+      - name: Validate docker-compose
+        run: |
+          docker compose config > /dev/null
+          echo "✅ docker-compose.yml is valid"
+
+      - name: Check required files
+        run: |
+          echo "Checking required files..."
+          test -f requirements.txt         && echo "  ✅ requirements.txt"
+          test -f Dockerfile.api           && echo "  ✅ Dockerfile.api"
+          test -f config/init.sql          && echo "  ✅ config/init.sql"
+          test -f frontend/html/index.html && echo "  ✅ dashboard HTML"
+          test -f api/services/mqtt_client.py  && echo "  ✅ mqtt_client.py"
+          test -f api/services/database.py     && echo "  ✅ database.py"
+          test -f api/services/alert_engine.py && echo "  ✅ alert_engine.py"
+          test -f api/models/mqtt_payload.py   && echo "  ✅ mqtt_payload.py"
+          test -f tests/fixtures/mqtt_simulator.py && echo "  ✅ mqtt_simulator.py"
+          test -f tests/unit/test_mqtt_payloads.py  && echo "  ✅ unit tests"
+          echo "✅ All required files present"
+
+  # ── 5. E2E Simulator Pipeline ──────────────────────────────────────
+  e2e-simulator:
+    name: E2E Simulator Pipeline
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mosquitto-clients
+        run: sudo apt-get install -y mosquitto-clients
+
+      - name: Start full stack
+        run: docker compose up -d --build
+        timeout-minutes: 10
+
+      - name: Wait for API to be healthy
+        run: |
+          for i in $(seq 1 36); do
+            if curl -sf http://localhost:8000/health > /dev/null; then
+              echo "✅ API healthy after ${i}x5s"; break
+            fi
+            echo "Waiting for API... (${i}/36)"; sleep 5
+          done
+          curl -sf http://localhost:8000/health || { echo "❌ API never became healthy"; docker compose logs api; exit 1; }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+
+      - name: Install test dependencies
+        run: pip install "requests>=2.28" "websockets>=11" "pytest>=7.4" "pytest-asyncio==0.21.1"
+
+      - name: Run E2E simulator tests
+        run: pytest tests/e2e/ -v --tb=short -p no:warnings
+        env:
+          E2E_API_BASE: http://localhost:8000
+          E2E_WS_URL: ws://localhost:8000/api/v1/stream
+          MQTT_HOST: localhost
+          MQTT_PORT: "1883"
+
+      - name: Show API logs on failure
+        if: failure()
+        run: docker compose logs api --tail=80
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down
+
+  # ── 6. Status Report ───────────────────────────────────────────────
   status:
     name: CI Status
     runs-on: ubuntu-latest
-    needs: [validate, docker]
-    
+    permissions:
+      contents: read
+    needs: [code-quality, unit-tests, integration-tests, docker-build, e2e-simulator]
+    if: always()
     steps:
       - name: Report
         run: |
-          echo "✅ Cloud API CI Complete"
-          echo "Validation: ${{ needs.validate.result }}"
-          echo "Docker: ${{ needs.docker.result }}"
+          echo "=== Cloud API CI Summary ==="
+          echo "Code Quality:       ${{ needs.code-quality.result }}"
+          echo "Unit Tests:         ${{ needs.unit-tests.result }}"
+          echo "Integration Tests:  ${{ needs.integration-tests.result }}"
+          echo "Docker Build:       ${{ needs.docker-build.result }}"
+          echo "E2E Simulator:      ${{ needs.e2e-simulator.result }}"
+          if [ "${{ needs.unit-tests.result }}" != "success" ]; then
+            echo "❌ Unit tests failed"; exit 1
+          fi
+          if [ "${{ needs.docker-build.result }}" != "success" ]; then
+            echo "❌ Docker build failed"; exit 1
+          fi
+          if [ "${{ needs.e2e-simulator.result }}" != "success" ]; then
+            echo "❌ E2E simulator tests failed"; exit 1
+          fi
+          echo "🎉 All critical checks passed"

@@ -1,92 +1,77 @@
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: #f5f5f5;
-    color: #333;
-}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f1117; color: #e0e0e0; }
 
 .header {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 30px 20px;
-    text-align: center;
+    background: linear-gradient(135deg, #1a1f36, #2d3561);
+    padding: 20px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #3a4080;
 }
+.header h1 { font-size: 1.6rem; color: #7eb8f7; }
+.header-status { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.status-indicator { font-size: 13px; padding: 4px 10px; border-radius: 12px; background: rgba(255,255,255,0.05); }
+.status-connected { color: #4ade80; }
+.status-disconnected { color: #f87171; }
+.last-update { font-size: 11px; color: #6b7280; }
 
-.header h1 {
-    font-size: 28px;
-    margin-bottom: 5px;
-}
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
 
-.container {
-    max-width: 1200px;
-    margin: 20px auto;
-    padding: 0 20px;
-}
-
-.status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
+.status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 20px; }
 
 .card {
-    background: white;
-    border-radius: 8px;
+    background: #1a1f36;
+    border: 1px solid #2d3561;
+    border-radius: 12px;
     padding: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-align: center;
+    transition: border-color 0.3s;
 }
+.card h3 { font-size: 0.9rem; color: #9ca3af; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.metric { font-size: 2.4rem; font-weight: bold; color: #7eb8f7; margin: 8px 0; }
+.metric-label { font-size: 0.8rem; color: #6b7280; }
 
-.card h3 {
-    margin-bottom: 15px;
-    color: #667eea;
-    font-size: 16px;
-    text-transform: uppercase;
+.risk-LOW { border-color: #166534; }
+.risk-LOW .metric { color: #4ade80; }
+.risk-MEDIUM { border-color: #854d0e; }
+.risk-MEDIUM .metric { color: #facc15; }
+.risk-HIGH { border-color: #991b1b; }
+.risk-HIGH .metric { color: #f87171; }
+
+.alerts-card { text-align: left; }
+.alerts-list { max-height: 120px; overflow-y: auto; margin-top: 8px; }
+.alert-item {
+    background: rgba(248, 113, 113, 0.1);
+    border-left: 3px solid #f87171;
+    padding: 6px 10px;
+    margin-bottom: 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
-
-.metric {
-    font-size: 32px;
-    font-weight: bold;
-    margin: 10px 0;
-}
-
-.metric-label {
-    font-size: 12px;
-    color: #999;
-    text-transform: uppercase;
-}
-
-.metric.success { color: #27ae60; }
-.metric.warning { color: #f39c12; }
-.metric.danger { color: #e74c3c; }
+.alert-item.severity-MEDIUM { border-left-color: #facc15; background: rgba(250, 204, 21, 0.1); }
+.alert-item.severity-HIGH { border-left-color: #f87171; background: rgba(248, 113, 113, 0.1); }
+.badge { background: #ef4444; color: white; border-radius: 10px; padding: 2px 8px; font-size: 12px; margin-left: 6px; }
+.btn-ack { background: none; border: 1px solid #4b5563; color: #9ca3af; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 11px; }
+.btn-ack:hover { background: #374151; }
 
 .chart-container {
-    background: white;
-    border-radius: 8px;
+    background: #1a1f36;
+    border: 1px solid #2d3561;
+    border-radius: 12px;
     padding: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
 }
-
-.placeholder {
-    text-align: center;
-    padding: 20px;
-    color: #999;
-    border: 1px solid #eee;
-    border-radius: 4px;
-    background: #fafafa;
-}
+.chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.chart-header h3 { font-size: 1rem; color: #9ca3af; }
+.chart-container h3 { font-size: 1rem; color: #9ca3af; margin-bottom: 16px; }
+.btn-refresh { background: #2d3561; border: none; color: #9ca3af; border-radius: 6px; padding: 6px 14px; cursor: pointer; font-size: 13px; }
+.btn-refresh:hover { background: #3a4080; }
 
 @media (max-width: 768px) {
-    .header h1 {
-        font-size: 20px;
-    }
-    
-    .status-grid {
-        grid-template-columns: 1fr;
-    }
+    .header { flex-direction: column; gap: 10px; text-align: center; }
+    .header-status { align-items: center; }
 }
