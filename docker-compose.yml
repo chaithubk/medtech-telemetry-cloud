@@ -74,6 +74,22 @@ services:
       timeout: 5s
       retries: 3
 
+  # Redis - Cache and WebSocket session store
+  redis:
+    image: redis:7-alpine
+    container_name: telemetry-redis
+    hostname: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   # FastAPI Server
   api:
     build:
@@ -95,6 +111,9 @@ services:
       INFLUXDB_URL: http://influxdb:8086
       INFLUXDB_BUCKET: telemetry
       INFLUXDB_ORG: medtech
+      INFLUXDB_TOKEN: ""
+      ALERT_RISK_THRESHOLD: "70"
+      ALERT_RISK_MEDIUM_THRESHOLD: "40"
       LOGLEVEL: INFO
       TZ: UTC
     ports:
