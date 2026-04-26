@@ -133,6 +133,27 @@ Displays:
 - Summary statistics
 ```
 
+### Live Changing Demo Data
+
+Use the bundled simulator publisher to continuously send changing vitals.
+
+```bash
+# Continuous stream (Ctrl+C to stop)
+bash scripts/publish_live_vitals.sh
+
+# Example: send 30 messages, one every second
+COUNT=30 INTERVAL=1 SOURCE=demo bash scripts/publish_live_vitals.sh
+```
+
+Optional environment variables:
+
+- `HOST` (default: `localhost`)
+- `PORT` (default: `1883`)
+- `TOPIC` (default: `medtech/vitals/latest`)
+- `INTERVAL` in seconds (default: `1`)
+- `SOURCE` (default: `live-sim`)
+- `COUNT` (default: `0`, meaning continuous)
+
 ## Integration with Devices
 
 ### Publish from QEMU / any host
