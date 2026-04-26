@@ -207,7 +207,7 @@ jobs:
           cache: pip
 
       - name: Install test dependencies
-        run: pip install requests websockets pytest pytest-asyncio
+        run: pip install "requests>=2.28" "websockets>=11" "pytest>=7.4" "pytest-asyncio==0.21.1"
 
       - name: Run E2E simulator tests
         run: pytest tests/e2e/ -v --tb=short -p no:warnings
