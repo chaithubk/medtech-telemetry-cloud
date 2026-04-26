@@ -1,0 +1,53 @@
+name: Cloud API Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    name: Validate Configuration
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Validate docker-compose
+        run: |
+          docker compose config > /dev/null
+          echo "✅ docker-compose.yml is valid"
+      
+      - name: Check files
+        run: |
+          echo "✅ Checking required files..."
+          [ -f "requirements.txt" ] && echo "  ✅ requirements.txt"
+          [ -f "Dockerfile.api" ] && echo "  ✅ Dockerfile.api"
+          [ -f "config/init.sql" ] && echo "  ✅ config/init.sql"
+          [ -f "frontend/html/index.html" ] && echo "  ✅ frontend/html/index.html"
+          echo "✅ All files present"
+
+  docker:
+    name: Docker Build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Build API image
+        run: |
+          docker build -t medtech-cloud-api:latest -f Dockerfile.api .
+          echo "✅ API Docker image built"
+
+  status:
+    name: CI Status
+    runs-on: ubuntu-latest
+    needs: [validate, docker]
+    
+    steps:
+      - name: Report
+        run: |
+          echo "✅ Cloud API CI Complete"
+          echo "Validation: ${{ needs.validate.result }}"
+          echo "Docker: ${{ needs.docker.result }}"

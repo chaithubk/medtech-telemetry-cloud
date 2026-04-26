@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # MQTT Broker
+  mqtt:
+    image: eclipse-mosquitto:latest
+    container_name: telemetry-mqtt
+    hostname: mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./config/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./config/mosquitto-medtech.conf:/mosquitto/config/conf.d/medtech.conf:ro
+      - mqtt_data:/mosquitto/data
+      - mqtt_log:/mosquitto/log
+    networks:
+      - telemetry-network
+    environment:
+      - TZ=UTC
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "mosquitto_sub -h localhost -t '$$SYS/broker/uptime' -C 1 -W 8"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  # PostgreSQL - Relational data
+  postgres:
+    image: postgres:15-alpine
+    container_name: telemetry-postgres
+    hostname: postgres
+    environment:
+      POSTGRES_USER: medtech
+      POSTGRES_PASSWORD: medtech123
+      POSTGRES_DB: telemetry
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U medtech -d telemetry"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # InfluxDB - Time-series data
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: telemetry-influxdb
+    hostname: influxdb
+    environment:
+      INFLUXDB_DB: telemetry
+      INFLUXDB_ADMIN_USER: admin
+      INFLUXDB_ADMIN_PASSWORD: admin123
+      INFLUXDB_HTTP_AUTH_ENABLED: "false"
+      TZ: UTC
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb_data:/var/lib/influxdb2
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # FastAPI Server
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: telemetry-api
+    hostname: api
+    environment:
+      PYTHONUNBUFFERED: 1
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      MQTT_BROKER: mqtt
+      MQTT_PORT: 1883
+      POSTGRES_USER: medtech
+      POSTGRES_PASSWORD: medtech123
+      POSTGRES_DB: telemetry
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      INFLUXDB_URL: http://influxdb:8086
+      INFLUXDB_BUCKET: telemetry
+      INFLUXDB_ORG: medtech
+      LOGLEVEL: INFO
+      TZ: UTC
+    ports:
+      - "8000:8000"
+    depends_on:
+      mqtt:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    volumes:
+      - ./api:/app/api:ro
+
+  # Nginx - Web Dashboard
+  dashboard:
+    image: nginx:alpine
+    container_name: telemetry-dashboard
+    hostname: dashboard
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./config/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    networks:
+      - telemetry-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  telemetry-network:
+    driver: bridge
+
+volumes:
+  mqtt_data:
+  mqtt_log:
+  postgres_data:
+  influxdb_data:

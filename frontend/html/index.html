@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedTech Telemetry Dashboard</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>🏥 MedTech Telemetry Dashboard</h1>
+        <p>Real-time Medical IoT Data</p>
+    </div>
+    
+    <div class="container">
+        <div class="status-grid">
+            <div class="card">
+                <h3>Latest Vital</h3>
+                <div id="latestVital" class="placeholder">Loading...</div>
+            </div>
+            
+            <div class="card">
+                <h3>Latest Prediction</h3>
+                <div id="latestPrediction" class="placeholder">Loading...</div>
+            </div>
+            
+            <div class="card">
+                <h3>System Status</h3>
+                <div id="systemStatus" class="placeholder">Loading...</div>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <h3>Vital Trends (Last 24 Hours)</h3>
+            <div id="chart" class="placeholder">Chart implementation pending</div>
+        </div>
+    </div>
+    
+    <script src="/js/dashboard.js"></script>
+</body>
+</html>
