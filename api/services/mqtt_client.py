@@ -42,6 +42,7 @@ class MQTTClient:
         self._client = mqtt_lib.Client(clean_session=True)
         self._client.on_connect = self._on_connect
         self._client.on_disconnect = self._on_disconnect
+        self._client.on_subscribe = self._on_subscribe
         self._client.on_message = self._on_message
 
         try:
@@ -58,9 +59,9 @@ class MQTTClient:
         if rc == 0:
             self._connected = True
             logger.info(f"MQTT connected to {settings.MQTT_BROKER}:{settings.MQTT_PORT}")
-            client.subscribe(settings.MQTT_TOPIC_VITALS)
-            client.subscribe(settings.MQTT_TOPIC_PREDICTIONS)
-            logger.info(f"Subscribed to {settings.MQTT_TOPIC_VITALS} and {settings.MQTT_TOPIC_PREDICTIONS}")
+            r1, mid1 = client.subscribe(settings.MQTT_TOPIC_VITALS)
+            r2, mid2 = client.subscribe(settings.MQTT_TOPIC_PREDICTIONS)
+            logger.info(f"Subscribed to {settings.MQTT_TOPIC_VITALS} (rc={r1},mid={mid1}) and {settings.MQTT_TOPIC_PREDICTIONS} (rc={r2},mid={mid2})")
         else:
             logger.error(f"MQTT connection failed with code {rc}")
 
@@ -68,6 +69,9 @@ class MQTTClient:
         self._connected = False
         if rc != 0:
             logger.warning(f"MQTT unexpected disconnect (rc={rc}), will reconnect...")
+
+    def _on_subscribe(self, client, userdata, mid, granted_qos):
+        logger.info(f"MQTT subscription ACKed by broker: mid={mid}, granted_qos={granted_qos}")
 
     def _log_future_exception(self, future: "asyncio.Future") -> None:
         """Log any exception raised by a coroutine dispatched from the MQTT thread."""
@@ -79,7 +83,7 @@ class MQTTClient:
         """Decode and dispatch incoming MQTT message to async handlers."""
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
-            logger.debug(f"MQTT message on {msg.topic}: {payload}")
+            logger.info(f"MQTT message received on {msg.topic}: {payload}")
             topic = msg.topic
 
             if topic == settings.MQTT_TOPIC_VITALS:
@@ -114,7 +118,7 @@ class MQTTClient:
         if vital_id is None:
             # Duplicate timestamp or DB error – skip InfluxDB write and alert
             # creation to avoid time-series duplicates and orphaned alerts.
-            logger.debug("Vital insert returned None (duplicate or error); skipping InfluxDB/alerts")
+            logger.info("Vital insert returned None (duplicate or DB error); skipping InfluxDB/alerts")
         else:
             await database.write_vital_to_influx(vital_dict)
             alerts = check_vital_alerts(vital_dict, vital_id)
